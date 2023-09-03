@@ -17,7 +17,7 @@ excluded_domains = ['google.com']
 
 # Read the Telegram bot token and user chat ID from environment variables
 telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', 'your_telegram_bot_token')
-authorized_user_chat_id = os.environ.get('AUTHORIZED_USER_CHAT_ID', 'your_authorized_user_chat_id')
+authorized_user_chat_id = int(os.environ.get('AUTHORIZED_USER_CHAT_ID', 'your_authorized_user_chat_id'))
 
 @app.route('/addblockdomain', methods=['POST'])
 def add_block_domain():
@@ -30,7 +30,7 @@ def add_block_domain():
     # Extract the user's chat ID
     user_chat_id = data.get('message', {}).get('chat', {}).get('id')
     
-    authorized_user_chat_id=int(authorized_user_chat_id)
+    # authorized_user_chat_id=int(authorized_user_chat_id)
 
     try:
         user_chat_id = int(user_chat_id)
