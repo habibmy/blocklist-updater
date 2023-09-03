@@ -30,6 +30,8 @@ def add_block_domain():
     # Extract the user's chat ID
     user_chat_id = data.get('message', {}).get('chat', {}).get('id')
 
+    user_chat_id = int(user_chat_id)
+
     # Check if the message is from the authorized user
     if user_chat_id != authorized_user_chat_id:
         send_telegram_message(user_chat_id, 'You are not authorized.')
