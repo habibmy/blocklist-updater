@@ -13,7 +13,7 @@ RUN apk add --no-cache --virtual .build-deps build-base \
     && apk del .build-deps build-base
 
 # Copy the application code to the container
-COPY . .
+COPY app.py .
 
 # Expose the port on which the Flask application runs
 EXPOSE 5000
