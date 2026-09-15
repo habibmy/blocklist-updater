@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Block Site</title>
+    <link rel="manifest" href="/addblockdomain/manifest.webmanifest" />
+    <link rel="stylesheet" href="/addblockdomain/style.css" />
+  </head>
+  <body>
+    <div class="card">
+      <h2>Block Site</h2>
+      <form method="GET" action="/addblockdomain">
+        <input
+          type="text"
+          name="url"
+          placeholder="https://example.com"
+          required
+        />
+        <button type="submit">Block Domain</button>
+      </form>
+      <div id="status" class="status"></div>
+    </div>
+
+    <script src="/addblockdomain/app.js"></script>
+  </body>
+</html>

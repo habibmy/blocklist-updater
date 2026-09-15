@@ -2,192 +2,121 @@ import os
 import re
 from urllib.parse import urlparse
 import requests
-from flask import Flask, request, render_template_string, Response
+from flask import Flask, request, jsonify, send_from_directory
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='public')
 
-# Read the blocklist file name from the environment variable
-data_dir = '/data' if os.path.exists('/data') else '.'
 blocklist_file_name = os.environ.get('BLOCKLIST_FILE_NAME', 'custom-blocklist.txt')
+data_dir = '/data' if os.path.exists('/data') else '.'
+blocklist_file = os.path.join(data_dir, blocklist_file_name)
 
-# Define the full path to the blocklist file within the /data directory
-blocklist_file = f'/data/{blocklist_file_name}'
+excluded_domains = ['google.com', 'www.google.com']
 
-# Define a list of domains to exclude (e.g., Google)
-excluded_domains = ['google.com']
-
-# Read the Telegram bot token and user chat ID from environment variables
-telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', 'your_telegram_bot_token')
-authorized_user_chat_id = int(os.environ.get('AUTHORIZED_USER_CHAT_ID', 'your_authorized_user_chat_id'))
-
-@app.route('/addblockdomain', methods=['POST'])
-def add_block_domain():
-    # Get the domain(s) from the request JSON
-    data = request.get_json()
-
-    # Extract the text from the message
-    message_text = data.get('message', {}).get('text', '')
-
-    # Extract the user's chat ID
-    user_chat_id = data.get('message', {}).get('chat', {}).get('id')
-    
-    # authorized_user_chat_id=int(authorized_user_chat_id)
-
-    try:
-        user_chat_id = int(user_chat_id)
-    except ValueError:
-        print("Chat ID : " + user_chat_id)
-        return 'Invalid user chat ID.', 200  # Return success (200) to acknowledge receipt
-
-
-    # Check if the message is from the authorized user
-    if user_chat_id != authorized_user_chat_id:
-        send_telegram_message(user_chat_id, 'You are not authorized.')
-    else:
-        # Extract URLs from the text using a regular expression
-        urls = re.findall(r'https?://\S+', message_text)
-
-        if not urls:
-            send_telegram_message(authorized_user_chat_id, 'No URLs found in the message.')
-        else:
-            try:
-                # Extract and append domains from the found URLs, excluding specified domains
-                extracted_domains = []
-                for url in urls:
-                    domain = extract_domain_from_url(url)
-                    if domain and domain not in excluded_domains:
-                        extracted_domains.append(domain)
-
-                if not extracted_domains:
-                    send_telegram_message(authorized_user_chat_id, 'No valid domains found in the URLs.')
-                else:
-                    # Append the extracted domains to the blocklist file
-                    with open(blocklist_file, 'a') as f:
-                        for domain in extracted_domains:
-                            f.write(domain + '\n')
-
-                    send_telegram_message(authorized_user_chat_id, f'Domains added to the blocklist file: {", ".join(extracted_domains)}')
-            except Exception as e:
-                send_telegram_message(authorized_user_chat_id, str(e))
-
-    return 'OK', 200  # Return success (200) to acknowledge receipt
-
-@app.route('/addblockdomain', methods=['GET'])
-def test_block_page():
-    # Android share sheet might place the URL inside 'url' or 'text'
-    raw_input = request.args.get('url') or request.args.get('text') or ''
-    status_msg = ""
-    domain = None
-
-    if raw_input:
-        match = re.search(r'https?://\S+', raw_input)
-        target = match.group(0) if match else raw_input
-        domain = extract_domain_from_url(target)
-
-        if domain and domain not in excluded_domains:
-            try:
-                with open(blocklist_file, 'a') as f:
-                    f.write(domain + '\n')
-                status_msg = f"Added: {domain}"
-                if telegram_bot_token and authorized_user_chat_id:
-                    send_telegram_message(authorized_user_chat_id, f"Added via Web: {domain}")
-            except Exception as e:
-                status_msg = f"Error: {str(e)}"
-        else:
-            status_msg = f"Skipped: {domain or 'Invalid'}"
-
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Block Site</title>
-      <link rel="manifest" href="/addblockdomain/manifest.webmanifest">
-      <style>
-        body { font-family: sans-serif; background: #181818; color: #fff; padding: 24px; text-align: center; }
-        input[type="text"] { width: 90%; max-width: 400px; padding: 10px; margin: 12px 0; border-radius: 6px; border: 1px solid #444; }
-        button { padding: 10px 20px; border-radius: 6px; border: none; background: #e53935; color: white; font-weight: bold; cursor: pointer; }
-        .status { margin-top: 20px; font-weight: bold; color: #4caf50; font-size: 1.2rem; }
-      </style>
-    </head>
-    <body>
-      <h2>Block Site</h2>
-      <form method="GET" action="/addblockdomain">
-        <input type="text" name="url" placeholder="https://example.com" value="{{ url }}" required>
-        <br>
-        <button type="submit">Block Domain</button>
-      </form>
-      {% if status %}
-        <p class="status">{{ status }}</p>
-      {% endif %}
-
-      <script>
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/addblockdomain/sw.js', { scope: '/addblockdomain' });
-        }
-        // Auto-close if shared from Android
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('url') || params.has('text')) {
-          setTimeout(() => window.close(), 1500);
-        }
-      </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html, url=raw_input, status=status_msg)
-
-@app.route('/addblockdomain/manifest.webmanifest')
-def share_manifest():
-    manifest_data = """{
-      "name": "Blocklist",
-      "short_name": "Block Site",
-      "start_url": "/addblockdomain",
-      "scope": "/addblockdomain",
-      "display": "standalone",
-      "background_color": "#181818",
-      "theme_color": "#181818",
-      "icons": [
-        {
-          "src": "https://cdn-icons-png.flaticon.com/512/564/564619.png",
-          "sizes": "512x512",
-          "type": "image/png"
-        }
-      ],
-      "share_target": {
-        "action": "/addblockdomain",
-        "method": "GET",
-        "params": {
-          "title": "title",
-          "text": "text",
-          "url": "url"
-        }
-      }
-    }"""
-    return Response(manifest_data, mimetype='application/manifest+json')
-
-@app.route('/addblockdomain/sw.js')
-def service_worker():
-    sw_data = """
-    self.addEventListener('install', e => self.skipWaiting());
-    self.addEventListener('activate', e => clients.claim());
-    self.addEventListener('fetch', e => e.respondWith(fetch(e.request)));
-    """
-    return Response(sw_data, mimetype='application/javascript')
+telegram_bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+raw_chat_id = os.environ.get('AUTHORIZED_USER_CHAT_ID', '0')
+try:
+    authorized_user_chat_id = int(raw_chat_id)
+except ValueError:
+    authorized_user_chat_id = 0
 
 def extract_domain_from_url(url):
     parsed_url = urlparse(url)
-    if parsed_url.netloc:
-        return parsed_url.netloc
-    else:
-        return None
+    netloc = parsed_url.netloc or parsed_url.path
+    if netloc:
+        return netloc.split(':')[0].strip().lower()
+    return None
+
+def append_domains_to_blocklist(domains):
+    os.makedirs(os.path.dirname(os.path.abspath(blocklist_file)), exist_ok=True)
+    existing = set()
+    if os.path.exists(blocklist_file):
+        with open(blocklist_file, 'r', encoding='utf-8') as f:
+            existing = {line.strip().lower() for line in f if line.strip()}
+
+    added = []
+    with open(blocklist_file, 'a', encoding='utf-8') as f:
+        for d in domains:
+            if d and d not in excluded_domains and d not in existing:
+                f.write(d + '\n')
+                existing.add(d)
+                added.append(d)
+    return added
+
+# -------------------------------------------------------------------
+# Static Files & PWA Routes (all kept under /addblockdomain)
+# -------------------------------------------------------------------
+
+@app.route('/addblockdomain', methods=['GET'])
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/addblockdomain/<path:filename>')
+def serve_static(filename):
+    return send_from_directory(app.static_folder, filename)
+
+@app.route('/addblockdomain/api', methods=['POST'])
+def add_block_api():
+    data = request.get_json(silent=True) or {}
+    domain = data.get('domain', '').strip().lower()
+
+    if not domain or '.' not in domain or domain in excluded_domains:
+        return jsonify({'status': 'error', 'message': f'Invalid domain: {domain}'}), 400
+
+    added = append_domains_to_blocklist([domain])
+
+    if telegram_bot_token and authorized_user_chat_id:
+        msg = f"Web added: {domain}" if added else f"Web shared: {domain} (already in list)"
+        send_telegram_message(authorized_user_chat_id, msg)
+
+    if not added:
+        return jsonify({'status': 'exists', 'domain': domain})
+
+    return jsonify({'status': 'success', 'domain': domain})
+
+# -------------------------------------------------------------------
+# Telegram Webhook Handler (Existing)
+# -------------------------------------------------------------------
+
+@app.route('/addblockdomain', methods=['POST'])
+def add_block_telegram():
+    data = request.get_json(silent=True) or {}
+    message_text = data.get('message', {}).get('text', '')
+    user_chat_id = data.get('message', {}).get('chat', {}).get('id')
+
+    try:
+        user_chat_id = int(user_chat_id)
+    except (ValueError, TypeError):
+        return 'Invalid chat ID.', 200
+
+    if user_chat_id != authorized_user_chat_id:
+        send_telegram_message(user_chat_id, 'You are not authorized.')
+        return 'OK', 200
+
+    urls = re.findall(r'https?://\S+', message_text)
+    if not urls:
+        send_telegram_message(user_chat_id, 'No URLs found.')
+        return 'OK', 200
+
+    extracted = [extract_domain_from_url(u) for u in urls]
+    valid_domains = [d for d in extracted if d]
+
+    try:
+        added = append_domains_to_blocklist(valid_domains)
+        if added:
+            send_telegram_message(user_chat_id, f'Added: {", ".join(added)}')
+        else:
+            send_telegram_message(user_chat_id, 'Already blocked or excluded.')
+    except Exception as e:
+        send_telegram_message(user_chat_id, f'Error: {str(e)}')
+
+    return 'OK', 200
 
 def send_telegram_message(chat_id, text):
-    url = f'https://api.telegram.org/bot{telegram_bot_token}/sendMessage'
-    data = {
-        'chat_id': chat_id,
-        'text': text
-    }
-    requests.post(url, data=data)
+    try:
+        url = f'https://api.telegram.org/bot{telegram_bot_token}/sendMessage'
+        requests.post(url, data={'chat_id': chat_id, 'text': text}, timeout=5)
+    except Exception as e:
+        print(f"Telegram alert failed: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True)

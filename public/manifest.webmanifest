@@ -1,0 +1,25 @@
+{
+  "name": "Blocklist Updater",
+  "short_name": "Block Site",
+  "start_url": "/addblockdomain",
+  "scope": "/addblockdomain",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/564/564619.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/addblockdomain",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
